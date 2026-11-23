@@ -50,3 +50,114 @@ class Game:
         if not self.finished:
             self.current = "O" if mark == "X" else "X"
         return mark
+
+
+class BoardRenderer:
+    """Отображать поле, фигуры и выигрышную линию на Canvas."""
+
+    SIZE = 420
+    CELL = SIZE // 3
+    COLORS = {"X": "#2563eb", "O": "#e05b39"}
+
+    def __init__(self, parent):
+        """Создать игровое полотно фиксированного размера."""
+        self.canvas = tk.Canvas(
+            parent, width=self.SIZE, height=self.SIZE,
+            bg="#ffffff", highlightthickness=0, cursor="hand2",
+        )
+        self.canvas.pack(pady=16)
+        self.clear()
+
+    def clear(self):
+        """Очистить фигуры и заново нарисовать сетку."""
+        self.canvas.delete("all")
+        for offset in (self.CELL, self.CELL * 2):
+            self.canvas.create_line(
+                offset, 12, offset, self.SIZE - 12,
+                fill="#dce3ed", width=3,
+            )
+            self.canvas.create_line(
+                12, offset, self.SIZE - 12, offset,
+                fill="#dce3ed", width=3,
+            )
+
+    def center(self, index):
+        """Вернуть координаты центра клетки."""
+        row, column = divmod(index, 3)
+        return ((column + 0.5) * self.CELL,
+                (row + 0.5) * self.CELL)
+
+    def draw_mark(self, index, mark, progress):
+        """Нарисовать долю фигуры от нуля до единицы."""
+        tag = f"mark_{index}"
+        self.canvas.delete(tag)
+        x, y = self.center(index)
+        radius = 39
+        color = self.COLORS[mark]
+        if mark == "X":
+            # Половина времени отведена каждой диагонали крестика.
+            for start_x, end_x, part in (
+                (x - radius, x + radius, min(1, progress * 2)),
+                (x + radius, x - radius, max(0, progress * 2 - 1)),
+            ):
+                if part > 0:
+                    self.canvas.create_line(
+                        start_x, y - radius,
+                        start_x + (end_x - start_x) * part,
+                        y - radius + 2 * radius * part,
+                        fill=color, width=8, capstyle=tk.ROUND, tags=tag,
+                    )
+        elif progress >= 1:
+            self.canvas.create_oval(
+                x - radius, y - radius, x + radius, y + radius,
+                outline=color, width=8, tags=tag,
+            )
+        elif progress > 0:
+            self.canvas.create_arc(
+                x - radius, y - radius, x + radius, y + radius,
+                start=90, extent=-360 * progress, style=tk.ARC,
+                outline=color, width=8, tags=tag,
+            )
+
+    def draw_win(self, line, progress):
+        """Соединить крайние клетки выигрышной линии."""
+        self.canvas.delete("win")
+        x1, y1 = self.center(line[0])
+        x2, y2 = self.center(line[-1])
+        self.canvas.create_line(
+            x1, y1, x1 + (x2 - x1) * progress,
+            y1 + (y2 - y1) * progress,
+            fill="#16a36a", width=7, capstyle=tk.ROUND, tags="win",
+        )
+
+
+class Controls:
+    """Создать панель управления и отображать состояние игры."""
+
+    def __init__(self, parent, new_round, reset_scores, show_rules):
+        """Разместить статус, счёт, кнопки и ползунок."""
+        self.status = tk.StringVar(value="Ход X")
+        self.score = tk.StringVar(value="X: 0   ·   Ничьи: 0   ·   O: 0")
+        self.duration = tk.IntVar(value=260)
+        ttk.Label(parent, textvariable=self.status,
+                  font=("Segoe UI", 18, "bold")).pack()
+        ttk.Label(parent, textvariable=self.score,
+                  font=("Segoe UI", 11)).pack(pady=(6, 14))
+        buttons = ttk.Frame(parent)
+        buttons.pack()
+        for title, command in (
+            ("Новая партия", new_round),
+            ("Сбросить счёт", reset_scores),
+            ("Правила", show_rules),
+        ):
+            ttk.Button(buttons, text=title, command=command).pack(
+                side=tk.LEFT, padx=4,
+            )
+        settings = ttk.Frame(parent)
+        settings.pack(fill=tk.X, pady=(18, 0))
+        ttk.Label(settings, text="Длительность хода (мс)").pack()
+        tk.Scale(
+            settings, from_=100, to=600, resolution=20,
+            orient=tk.HORIZONTAL, variable=self.duration,
+            length=320, highlightthickness=0,
+        ).pack()
